@@ -23,7 +23,7 @@ spec:
         runAsGroup: 65532
       containers:
         - name: api
-          image: ghcr.io/kauatwn/go-k8s-observability-platform:v1
+          image: api # Imagem genérica que é sobreposta pelas overlays do Kustomize
           imagePullPolicy: IfNotPresent # Não baixa a imagem se ela já estiver no nó local
           securityContext:
             allowPrivilegeEscalation: false
