@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels:
+    app: go-observability-api
+spec:
+  replicas: 2 # Roda duas réplicas da API para testar o balanceamento
+  selector:
+    matchLabels:
+      app: go-observability-api
+  template:
+    metadata:
+      labels:
+        app: go-observability-api
+    spec:
+      # O K8s só vai rodar a API nos nós com o label "node-role=app-worker"
+      nodeSelector:
+        node-role: app-worker
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+      containers:
+        - name: api
+          image: go-k8s-observability-platform:v1
+          imagePullPolicy: IfNotPresent # Não baixa a imagem se ela já estiver no nó local
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - containerPort: 8080
+
+          # Limites de consumo ajustados para uma API em Go (muito leve)
+          resources:
+            requests:
+              cpu: "50m" # Pede 5% de um núcleo de CPU
+              memory: "64Mi" # Pede 64MB de RAM
+            limits:
+              cpu: "200m" # Limita a 20% de um núcleo
+              memory: "256Mi" # Limita a 256MB de RAM
+
+          # Liveness: O K8s reinicia o Pod se a API não estiver respondendo
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 2
+            periodSeconds: 5
+
+          # Readiness: O K8s só envia tráfego para o Pod se a API estiver pronta
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 2
+            periodSeconds: 5
+
+          # Monta o volume efêmero no caminho /tmp dentro do container
+          volumeMounts:
+            - mountPath: /tmp
+              name: tmp-volume
+
+      # O volume efêmero é criado na RAM do nó, garantindo alta performance e evitando I/O de disco
+      volumes:
+        - name: tmp-volume
+          emptyDir:
+            medium: Memory # Grava direto na RAM (tmpfs), ultra rápido e sem I/O de disco
+            sizeLimit: 64Mi # Limita a 64MB, impedindo que o volume consuma recursos excessivos
+
