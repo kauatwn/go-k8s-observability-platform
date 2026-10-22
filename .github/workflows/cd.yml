@@ -68,11 +68,13 @@ jobs:
         run: |
           kind load docker-image "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}" --name "${CLUSTER_NAME}"
 
-      - name: "Deploy Observability Stack 🚀"
+      - name: "Deploy Observability Stack with Kustomize 🚀"
         run: |
-          kubectl apply -f k8s/app/
-          kubectl apply -f k8s/monitoring/prometheus/
-          kubectl apply -f k8s/monitoring/grafana/
+          if command -v kustomize &> /dev/null; then
+            echo "Setting dynamic image in dev overlay..."
+            (cd k8s/overlays/dev && kustomize edit set image api="${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}")
+          fi
+          kubectl apply -k k8s/overlays/dev/
 
       - name: "Wait for Workloads to Stabilize ⏳"
         run: |
