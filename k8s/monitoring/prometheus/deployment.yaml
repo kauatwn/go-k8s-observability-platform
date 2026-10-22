@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      # Isola o Prometheus no Worker 2
+      nodeSelector:
+        node-role: prometheus-worker
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.51.2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9090
+
+          # Limites de consumo para evitar que o Prometheus derrube o nó
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+
+          # Liveness: Verifica se o processo do Prometheus não travou
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          # Readiness: Verifica se o Prometheus já carregou a base de dados
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/prometheus/prometheus.yml
+              subPath: prometheus.yml
+      volumes:
+        - name: config-volume
+          configMap:
+            name: prometheus-config
