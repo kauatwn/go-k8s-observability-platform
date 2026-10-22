@@ -2,9 +2,9 @@ name: "Continuous Integration"
 
 on:
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
@@ -19,8 +19,8 @@ defaults:
     shell: bash
 
 env:
-  IMAGE_NAME: "go-k8s-observability-platform"
-  IMAGE_TAG: ${{ github.sha }}
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   go-lint:
@@ -77,6 +77,7 @@ jobs:
           cache-dependency-path: "go.sum"
 
       - name: "Validate Kubernetes Manifests (Kubeconform) ☸️"
+        # Kubeconform version: 0.8.0
         run: |
           go run github.com/yannh/kubeconform/cmd/kubeconform@02374e583d700721f57300fae78e11acd27ee539 \
             -summary \
@@ -118,30 +119,36 @@ jobs:
           retention-days: 7
 
   docker-build:
-    name: "Docker Build & Sanity Check"
+    name: "Docker Build & Push to GHCR"
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
+      packages: write
 
     steps:
       - name: "Checkout code 🛎️"
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
 
       - name: "Setup Docker Buildx 🐳"
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-        with:
-          driver-opts: network=host
 
-      - name: "Build Docker Image 🏗️"
+      - name: "Login to GHCR 🔑"
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "Build and Push Docker Image 🚀"
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: Dockerfile
-          push: false
-          tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v1
           cache-from: type=gha,scope=api-build
-          cache-to: type=gha,mode=max,scope=api-build
+          cache-to: ${{ github.event_name != 'pull_request' && 'type=gha,mode=max,scope=api-build' || '' }}
