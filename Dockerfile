@@ -13,6 +13,8 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api
 # Imagem de execução Distroless (Ultra segura e leve)
 FROM gcr.io/distroless/static-debian12:nonroot
 
+LABEL org.opencontainers.image.source="https://github.com/kauatwn/go-k8s-observability-platform"
+
 # Copia o executável do stage de build
 COPY --from=build /out/api /api
 
