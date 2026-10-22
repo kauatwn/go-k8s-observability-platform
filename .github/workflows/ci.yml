@@ -139,6 +139,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+    needs: [go-lint, k8s-lint, go-build]
 
     steps:
       - name: "Checkout code 🛎️"
