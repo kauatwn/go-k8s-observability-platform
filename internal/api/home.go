@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 )
 
@@ -15,10 +16,10 @@ func NewHomeHandler() *HomeHandler {
 func (h *HomeHandler) Home(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	err := json.NewEncoder(w).Encode(map[string]string{
+
+	if err := json.NewEncoder(w).Encode(map[string]string{
 		"message": "Welcome to Go K8s Observability Platform!",
-	})
-	if err != nil {
-		return
+	}); err != nil {
+		slog.Error("Failed to encode home response", "error", err)
 	}
 }
