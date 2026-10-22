@@ -1,0 +1,14 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: observability-cluster
+nodes:
+  - role: control-plane
+  - role: worker
+    labels:
+      node-role: app-worker # Worker 1: Reservado para a API Go
+  - role: worker
+    labels:
+      node-role: prometheus-worker # Worker 2: Reservado para o Prometheus
+  - role: worker
+    labels:
+      node-role: grafana-worker # Worker 3: Reservado para o Grafana
