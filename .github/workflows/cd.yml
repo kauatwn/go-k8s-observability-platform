@@ -1,0 +1,168 @@
+name: "Kind Kubernetes Deployment (Dev)"
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  IMAGE_NAME: "go-k8s-observability-platform"
+  IMAGE_TAG: "v1"
+  CLUSTER_NAME: "observability-cluster"
+
+jobs:
+  deploy-kind:
+    name: "Provision Kind Cluster & E2E Validation"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: "Checkout code 🛎️"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Setup Docker Buildx 🐳"
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: network=host
+
+      - name: "Build Application Docker Image 🏗️"
+        run: |
+          docker build -t "${IMAGE_NAME}:${IMAGE_TAG}" .
+
+      - name: "Ensure Kind CLI is Installed 🛠️"
+        run: |
+          if ! command -v kind &> /dev/null; then
+            echo "Kind not found, installing..."
+            KIND_VERSION="v0.33.0"
+            curl -Lo ./kind "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
+            chmod +x ./kind
+            sudo mv ./kind /usr/local/bin/kind
+          fi
+          kind version
+
+      - name: "Create Kind Cluster ☸️"
+        run: |
+          kind create cluster --config k8s/kind/cluster.yaml
+
+      - name: "Load Image into Kind Cluster 📦"
+        run: |
+          kind load docker-image "${IMAGE_NAME}:${IMAGE_TAG}" --name "${CLUSTER_NAME}"
+
+      - name: "Deploy Observability Stack 🚀"
+        run: |
+          kubectl apply -f k8s/app/
+          kubectl apply -f k8s/monitoring/prometheus/
+          kubectl apply -f k8s/monitoring/grafana/
+
+      - name: "Wait for Workloads to Stabilize ⏳"
+        run: |
+          echo "--- Cluster Nodes ---"
+          kubectl get nodes -o wide
+
+          echo "--- Waiting for API deployment rollout ---"
+          kubectl rollout status deployment/api --timeout=120s
+
+          echo "--- Waiting for Prometheus deployment rollout ---"
+          kubectl rollout status deployment/prometheus --timeout=120s
+
+          echo "--- Waiting for Grafana deployment rollout ---"
+          kubectl rollout status deployment/grafana --timeout=120s
+
+          echo "--- Running Pods ---"
+          kubectl get pods -o wide
+
+      - name: "Run E2E Smoke Tests 🧪"
+        run: |
+          echo "--- Starting background port-forwards ---"
+          kubectl port-forward svc/api 8080:8080 &
+          API_PF_PID=$!
+
+          kubectl port-forward svc/prometheus 9090:9090 &
+          PROM_PF_PID=$!
+
+          kubectl port-forward svc/grafana 3000:3000 &
+          GRAF_PF_PID=$!
+
+          # Garante que os processos de port-forward serão finalizados ao término do step
+          trap "kill $API_PF_PID $PROM_PF_PID $GRAF_PF_PID 2>/dev/null || true" EXIT
+
+          echo "--- Smoke Testing API: /healthz ---"
+          curl --retry 15 \
+            --retry-delay 2 \
+            --retry-connrefused \
+            --fail \
+            -sS \
+            http://127.0.0.1:8080/healthz
+
+          echo -e "\n--- Smoke Testing API: /ready ---"
+          curl --retry 15 \
+            --retry-delay 2 \
+            --retry-connrefused \
+            --fail \
+            -sS \
+            http://127.0.0.1:8080/ready
+
+          echo -e "\n--- Smoke Testing API: / (Home) ---"
+          curl --retry 10 \
+            --retry-delay 2 \
+            --retry-connrefused \
+            --fail \
+            -sS \
+            http://127.0.0.1:8080/
+
+          echo -e "\n--- Smoke Testing API: /metrics ---"
+          curl --retry 10 \
+            --retry-delay 2 \
+            --retry-connrefused \
+            --fail \
+            -sS \
+            http://127.0.0.1:8080/metrics | grep "http_requests_total"
+
+          echo -e "\n--- Smoke Testing Prometheus: /-/healthy ---"
+          curl --retry 15 \
+            --retry-delay 2 \
+            --retry-connrefused \
+            --fail \
+            -sS \
+            http://127.0.0.1:9090/-/healthy
+
+          echo -e "\n--- Smoke Testing Grafana: /api/health ---"
+          curl --retry 20 \
+            --retry-delay 2 \
+            --retry-connrefused \
+            --fail \
+            -sS \
+            http://127.0.0.1:3000/api/health
+
+          echo -e "\nE2E Smoke Tests finished successfully! 🎉"
+
+      - name: "Diagnostics on Failure 📋"
+        if: failure()
+        run: |
+          echo "=== Cluster Nodes ==="
+          kubectl get nodes -o wide
+          echo "=== All Pods ==="
+          kubectl get pods -A -o wide
+          echo "=== Describe Pods ==="
+          kubectl describe pods
+          echo "=== API Pod Logs ==="
+          kubectl logs -l app=go-observability-api --tail=100
+          echo "=== Prometheus Pod Logs ==="
+          kubectl logs -l app=prometheus --tail=100
+          echo "=== Grafana Pod Logs ==="
+          kubectl logs -l app=grafana --tail=100
