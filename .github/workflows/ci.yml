@@ -76,14 +76,28 @@ jobs:
           cache: true
           cache-dependency-path: "go.sum"
 
-      - name: "Validate Kubernetes Manifests (Kubeconform) ☸️"
+      - name: "Validate Kubernetes Manifests (Kubeconform & Kustomize) ☸️"
         # Kubeconform version: 0.8.0
         run: |
+          echo "=== 1. Validating Base Manifests ==="
           go run github.com/yannh/kubeconform/cmd/kubeconform@02374e583d700721f57300fae78e11acd27ee539 \
             -summary \
             -schema-location default \
             -strict \
-            k8s/app/ k8s/monitoring/prometheus/ k8s/monitoring/grafana/
+            -ignore-filename-pattern '.*kustomization\.yaml' \
+            k8s/base/app/ k8s/base/monitoring/prometheus/ k8s/base/monitoring/grafana/
+
+          echo "=== 2. Validating Dev Overlay Build & Schemas ==="
+          kubectl kustomize k8s/overlays/dev | go run github.com/yannh/kubeconform/cmd/kubeconform@02374e583d700721f57300fae78e11acd27ee539 \
+            -summary \
+            -schema-location default \
+            -strict
+
+          echo "=== 3. Validating Prod Overlay Build & Schemas ==="
+          kubectl kustomize k8s/overlays/prod | go run github.com/yannh/kubeconform/cmd/kubeconform@02374e583d700721f57300fae78e11acd27ee539 \
+            -summary \
+            -schema-location default \
+            -strict
 
   go-build:
     name: "Go: Build Binary"
