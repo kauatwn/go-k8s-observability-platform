@@ -1,0 +1,149 @@
+name: "Continuous Integration"
+
+on:
+  pull_request:
+    branches: ["main"]
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  IMAGE_NAME: "go-k8s-observability-platform"
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  go-lint:
+    name: "Go: Lint, Vet & Vulncheck"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - name: "Checkout code 🛎️"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Setup Go 🐹"
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: "go.mod"
+          cache: true
+          cache-dependency-path: "go.sum"
+
+      - name: "Check Code Formatting (gofmt) 🎨"
+        run: |
+          if [[ -n $(gofmt -l .) ]]; then
+            echo "Code is not formatted. Please run 'gofmt -w .' to format the code."
+            exit 1
+          fi
+
+      - name: "Run Go Vet 🔍"
+        run: go vet ./...
+
+      - name: "Run Go Vulnerability Check (govulncheck) 🛡️"
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  k8s-lint:
+    name: "Validate Kubernetes Manifests"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - name: "Checkout code 🛎️"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Setup Go 🐹"
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: "go.mod"
+          cache: true
+          cache-dependency-path: "go.sum"
+
+      - name: "Validate Kubernetes Manifests (Kubeconform) ☸️"
+        run: |
+          go run github.com/yannh/kubeconform/cmd/kubeconform@02374e583d700721f57300fae78e11acd27ee539 \
+            -summary \
+            -schema-location default \
+            -strict \
+            k8s/app/ k8s/monitoring/prometheus/ k8s/monitoring/grafana/
+
+  go-build:
+    name: "Go: Build Binary & Checksums"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - name: "Checkout code 🛎️"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Setup Go 🐹"
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: "go.mod"
+          cache: true
+          cache-dependency-path: "go.sum"
+
+      - name: "Build Static Binary 🔨"
+        run: |
+          mkdir -p bin
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o bin/api ./cmd/api
+
+      - name: "Upload Binary Artifacts 📤"
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: api-linux-amd64
+          path: |
+            bin/api
+            bin/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
+
+  docker-build:
+    name: "Docker Build & Sanity Check"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: "Checkout code 🛎️"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Setup Docker Buildx 🐳"
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: network=host
+
+      - name: "Build Docker Image 🏗️"
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          platforms: linux/amd64
+          cache-from: type=gha,scope=api-build
+          cache-to: type=gha,mode=max,scope=api-build
