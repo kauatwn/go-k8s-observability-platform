@@ -2,9 +2,9 @@ name: "Continuous Integration"
 
 on:
   pull_request:
-    branches: ["main"]
+    branches: [ "main" ]
   push:
-    branches: ["main"]
+    branches: [ "main" ]
   workflow_dispatch:
 
 permissions:
@@ -85,7 +85,7 @@ jobs:
             k8s/app/ k8s/monitoring/prometheus/ k8s/monitoring/grafana/
 
   go-build:
-    name: "Go: Build Binary & Checksums"
+    name: "Go: Build Binary"
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -113,9 +113,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: api-linux-amd64
-          path: |
-            bin/api
-            bin/SHA256SUMS
+          path: bin/api
           if-no-files-found: error
           retention-days: 7
 
