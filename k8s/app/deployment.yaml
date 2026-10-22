@@ -23,7 +23,7 @@ spec:
         runAsGroup: 65532
       containers:
         - name: api
-          image: go-k8s-observability-platform:v1
+          image: ghcr.io/kauatwn/go-k8s-observability-platform:v1
           imagePullPolicy: IfNotPresent # Não baixa a imagem se ela já estiver no nó local
           securityContext:
             allowPrivilegeEscalation: false
