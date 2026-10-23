@@ -1,9 +1,12 @@
 name: "Kind Kubernetes Deployment (Dev)"
 
 on:
-  workflow_dispatch:
-  push:
+  workflow_run:
+    workflows: ["Continuous Integration"]
+    types:
+      - completed
     branches: ["main"]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -27,6 +30,7 @@ jobs:
   deploy-kind:
     name: "Provision Kind Cluster & E2E Validation"
     runs-on: ubuntu-24.04
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     timeout-minutes: 15
     permissions:
       contents: read
