@@ -23,8 +23,9 @@ defaults:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  IMAGE_TAG: "v1"
+  IMAGE_TAG: ${{ github.ref_name }}
   CLUSTER_NAME: "observability-cluster"
+  KIND_SHA256: "aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d"
 
 jobs:
   deploy-kind:
@@ -48,6 +49,9 @@ jobs:
             echo "Kind not found, installing..."
             KIND_VERSION="v0.33.0"
             curl -fsSLo ./kind "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
+            echo "Verifying Kind binary SHA256..."
+            echo "${KIND_SHA256}  ./kind" | sha256sum --check --status
+            echo "SHA256 checksum verified ✅"
             chmod +x ./kind
             sudo mv ./kind /usr/local/bin/kind
           fi
