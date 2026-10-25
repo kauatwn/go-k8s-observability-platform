@@ -7,7 +7,7 @@ resources:
 images:
   - name: api
     newName: ghcr.io/kauatwn/go-k8s-observability-platform
-    newTag: v1.0.0
+    newTag: v1
 
 patches:
   - path: replicas_patch.yaml
