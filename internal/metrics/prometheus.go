@@ -3,8 +3,8 @@ package metrics
 import "github.com/prometheus/client_golang/prometheus"
 
 var (
-	// HTTPRequestsTotal conta as requisições, separadas por rota e método HTTP
-	HTTPRequestsTotal = prometheus.NewCounterVec(
+	// httpRequestsTotal conta as requisições, separadas por rota e método HTTP
+	httpRequestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "http_requests_total",
 			Help: "Total HTTP requests received.",
@@ -13,7 +13,12 @@ var (
 	)
 )
 
-// Register inicializa os contadores no registro global do Prometheus
+// Register registra as métricas no registry global do Prometheus
 func Register() {
-	prometheus.MustRegister(HTTPRequestsTotal)
+	prometheus.MustRegister(httpRequestsTotal)
+}
+
+// RecordHTTPRequest incrementa o contador de requisições HTTP
+func RecordHTTPRequest(path, method string) {
+	httpRequestsTotal.WithLabelValues(path, method).Inc()
 }

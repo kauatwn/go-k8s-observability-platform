@@ -6,11 +6,19 @@ import (
 	"net/http"
 )
 
-// RecordMetricsMiddleware conta as requisições usando a lib oficial do Prometheus
+// RecordMetricsMiddleware registra métricas e logs das requisições HTTP usando a lib oficial do Prometheus.
 func RecordMetricsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Incrementa o contador passando o Path (ex: "/healthz") e o Method (ex: "GET")
-		metrics.HTTPRequestsTotal.WithLabelValues(r.URL.Path, r.Method).Inc()
+		defer func() {
+			path := r.Pattern
+
+			if path == "" {
+				path = "unmatched"
+			}
+
+			// Incrementa o contador passando o Path (ex: "/healthz") e o Method (ex: "GET")
+			metrics.RecordHTTPRequest(path, r.Method)
+		}()
 
 		slog.Info("HTTP request received",
 			slog.String("method", r.Method),
