@@ -31,9 +31,10 @@ func main() {
 	server := &http.Server{
 		Addr:              ":8080",
 		Handler:           mux,
-		ReadHeaderTimeout: 2 * time.Second,  // Mitiga ataques de Slowloris
-		ReadTimeout:       5 * time.Second,  // Limite para leitura do corpo da requisição
-		WriteTimeout:      10 * time.Second, // Limite para escrita da resposta
+		ReadHeaderTimeout: 2 * time.Second,   // Mitiga ataques de Slowloris
+		ReadTimeout:       5 * time.Second,   // Limite para leitura do corpo da requisição
+		WriteTimeout:      10 * time.Second,  // Limite para escrita da resposta
+		IdleTimeout:       120 * time.Second, // Tempo máximo de inatividade antes de fechar a conexão (keep-alive)
 	}
 
 	// Configura o contexto para capturar sinais de interrupção (Ctrl+C) e SIGTERM do Kubernetes
