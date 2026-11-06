@@ -14,45 +14,39 @@ type HealthHandler struct {
 
 func NewHealthHandler() *HealthHandler {
 	h := &HealthHandler{}
+
 	go func() {
 		// Simula um tempo de inicialização do serviço (3 segundos de aquecimento)
 		time.Sleep(3 * time.Second)
 		h.isReady.Store(true)
 		slog.Info("Service is now ready to accept traffic")
 	}()
+
 	return h
 }
 
 // Healthz retorna o status de saúde do processo (Liveness Probe)
 func (h *HealthHandler) Healthz(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	if err := json.NewEncoder(w).Encode(map[string]string{
-		"status": "UP",
-	}); err != nil {
-		slog.Error("Failed to encode healthz response", "error", err)
-	}
+	respondJSON(w, http.StatusOK, map[string]string{"status": "UP"})
 }
 
 // Ready retorna o status de prontidão do serviço (Readiness Probe)
 func (h *HealthHandler) Ready(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
+	// Se o serviço ainda não estiver pronto, retorna 503 Service Unavailable
 	if !h.isReady.Load() {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		if err := json.NewEncoder(w).Encode(map[string]string{
-			"status": "NOT READY",
-		}); err != nil {
-			slog.Error("Failed to encode not ready response", "error", err)
-		}
+		respondJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "NOT READY"})
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(map[string]string{
-		"status": "READY",
-	}); err != nil {
-		slog.Error("Failed to encode ready response", "error", err)
+	respondJSON(w, http.StatusOK, map[string]string{"status": "READY"})
+}
+
+// respondJSON centraliza a escrita dos cabeçalhos, status code e o tratamento de erro do encoder JSON
+func respondJSON(w http.ResponseWriter, statusCode int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		slog.Error("Failed to encode JSON response", "error", err)
 	}
 }
