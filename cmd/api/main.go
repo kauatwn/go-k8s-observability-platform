@@ -19,6 +19,14 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
+	// Executa o ciclo de vida da aplicação e trata qualquer erro fatal na raiz
+	if err := run(); err != nil {
+		slog.Error("Application failed to run", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	slog.Info("Starting application", slog.String("env", "development"))
 
 	// Registra as métricas da aplicação no coletor do Prometheus
@@ -41,29 +49,42 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Canal buffered para capturar erros de inicialização ou execução do servidor HTTP
+	serverErrors := make(chan error, 1)
+
 	// Inicia o servidor HTTP em uma goroutine separada para não bloquear a execução principal
 	go func() {
 		slog.Info("Server is listening", slog.String("addr", server.Addr))
-
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("Server failed to start", "error", err)
-			os.Exit(1)
-		}
+		serverErrors <- server.ListenAndServe()
 	}()
 
-	// Aguarda o contexto ser cancelado (sinal de interrupção ou SIGTERM)
-	<-ctx.Done()
-	slog.Info("Received shutdown signal, starting graceful shutdown...")
+	// Aguarda falha inesperada no servidor OU sinal de término do sistema operacional/Kubernetes
+	select {
+	case err := <-serverErrors:
+		if !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+
+	case <-ctx.Done():
+		slog.Info("Received shutdown signal, starting graceful shutdown...")
+	}
 
 	// Cria um contexto com tempo limite de 10s para drenar as requisições em andamento
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Encerra o servidor graciosamente
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		slog.Error("Server forced to shutdown due to error", "error", err)
-		os.Exit(1)
+	// Tenta encerrar o servidor graciosamente
+	err := server.Shutdown(shutdownCtx)
+	if err == nil {
+		slog.Info("Server stopped gracefully. Bye!")
+		return nil
 	}
 
-	slog.Info("Server stopped gracefully. Bye!")
+	// Força o fechamento das conexões ativas caso o graceful shutdown falhe
+	if closeErr := server.Close(); closeErr != nil {
+		return errors.Join(err, closeErr)
+	}
+
+	return err
 }
