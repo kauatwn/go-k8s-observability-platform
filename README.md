@@ -74,6 +74,22 @@ A API é instrumentada nativamente com o **Método RED** (*Rate, Errors, Duratio
 +-----------------------------------------------------------------------------------+
 ```
 
+## Evidências de Execução
+
+Capturas obtidas durante a execução local da stack no cluster Kind, validando o agendamento dos Pods por nó, a descoberta de alvos pelo Prometheus e a visualização das métricas no Grafana:
+
+### Distribuição dos Pods nos Workers (`nodeSelector`)
+
+![Pods distribuídos no cluster Kind](docs/kubectl-pods.png)
+
+### Targets Ativos no Prometheus
+
+![Prometheus Targets UP](docs/prometheus-targets.png)
+
+### Métricas e Runtime no Grafana (Dashboard 6671)
+
+![Grafana Dashboard](docs/grafana-dashboard.png)
+
 ## Tecnologias e Decisões de Engenharia
 
 ### 1. Aplicação & Runtime (Go 1.27)
@@ -152,7 +168,7 @@ A API é instrumentada nativamente com o **Método RED** (*Rate, Errors, Duratio
 ### Pré-requisitos
 
 - [Docker Engine](https://docs.docker.com/get-docker/) em execução
-- [Kind](https://kind.sigs.io/) instalado
+- [Kind](https://kind.sigs.k8s.io/) instalado
 - [kubectl](https://kubernetes.io/docs/tasks/tools/) instalado
 - [Go 1.27+](https://go.dev/dl/) *(opcional, apenas para rodar os testes unitários localmente)*
 
