@@ -1,3 +1,5 @@
+// Package api implementa os handlers HTTP, o roteamento e os middlewares
+// de observabilidade da aplicação.
 package api
 
 import (
@@ -6,22 +8,24 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// SetupRouter cria o multiplexador e registra todas as rotas
-func SetupRouter() *http.ServeMux {
+// SetupRouter cria o multiplexador HTTP, registra os endpoints da aplicação
+// e envolve o roteador inteiro com o middleware de métricas e logs.
+// Retorna a interface http.Handler para manter compatibilidade com http.Server.
+func SetupRouter() http.Handler {
 	mux := http.NewServeMux()
-
 	home := NewHomeHandler()
 	health := NewHealthHandler()
 
-	// Rota raiz da API envolta pelo middleware de métricas
-	mux.Handle("/", RecordMetricsMiddleware(http.HandlerFunc(home.Home)))
+	// O sufixo {$} exige correspondência exata com a raiz "/",
+	// garantindo que URLs desconhecidas retornem 404 Not Found em vez de cair aqui.
+	mux.HandleFunc("/{$}", home.Home)
 
-	// Rotas do Kubernetes para verificação de saúde e prontidão (liveness e readiness probes)
-	mux.HandleFunc("/healthz", health.Healthz)
-	mux.HandleFunc("/ready", health.Ready)
+	// Endpoints utilizados pelas probes de ciclo de vida do Kubernetes
+	mux.HandleFunc("/healthz", health.Healthz) // Liveness probe
+	mux.HandleFunc("/ready", health.Ready)     // Readiness probe
 
-	// Rota interna do Prometheus (usando o handler oficial da biblioteca)
+	// Endpoint padrão onde o Prometheus realiza o scrape das métricas
 	mux.Handle("/metrics", promhttp.Handler())
 
-	return mux
+	return RecordMetricsMiddleware(mux)
 }
